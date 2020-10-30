@@ -1,14 +1,26 @@
 package org.vivecraft.provider;
 
 import java.io.IOException;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.ARBShaderObjects;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
+import org.lwjgl.openvr.*;
+
+import static org.lwjgl.openvr.VR.*;
+import static org.lwjgl.openvr.VRSystem.*;
+import static org.lwjgl.openvr.VRCompositor.*;
+import static org.lwjgl.openvr.VRInput.*;
+
 import org.vivecraft.gameplay.screenhandlers.GuiHandler;
 import org.vivecraft.gameplay.screenhandlers.KeyboardHandler;
 import org.vivecraft.gameplay.screenhandlers.RadialHandler;
@@ -25,14 +37,7 @@ import org.vivecraft.utils.LangHelper;
 import com.google.gson.JsonSyntaxException;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.sun.jna.Memory;
-import com.sun.jna.Pointer;
-import com.sun.jna.ptr.IntByReference;
 
-import jopenvr.HiddenAreaMesh_t;
-import jopenvr.HmdMatrix44_t;
-import jopenvr.JOpenVRLibrary;
-import jopenvr.JOpenVRLibrary.EVRCompositorError;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.Tessellator;
 import net.minecraft.client.renderer.vertex.DefaultVertexFormats;
@@ -51,6 +56,8 @@ import net.optifine.shaders.Shaders;
  */
 public class OpenVRStereoRenderer 
 {
+	private static final Logger LOGGER = LogManager.getLogger();
+
 	//Render target fbs
 	public Framebuffer framebufferVrRender;
 	public Framebuffer framebufferMR;
@@ -93,7 +100,7 @@ public class OpenVRStereoRenderer
 	// TextureIDs of framebuffers for each eye
 	private int LeftEyeTextureId =-1, RightEyeTextureId=-1;
 
-	private HiddenAreaMesh_t[] hiddenMeshes = new HiddenAreaMesh_t[2];
+	private HiddenAreaMesh.Buffer hiddenMeshes = HiddenAreaMesh.create(2);
 	private float[][] hiddenMesheVertecies = new float[2][];
 	private Tuple<Integer, Integer> resolution;
 	public float ss = -1;
@@ -106,22 +113,32 @@ public class OpenVRStereoRenderer
 		if (resolution != null)
 			return resolution;
 
-		IntByReference rtx = new IntByReference();
-		IntByReference rty = new IntByReference();
-		MCOpenVR.vrsystem.GetRecommendedRenderTargetSize.apply(rtx, rty);
-		resolution = new Tuple<>(rtx.getValue(), rty.getValue());
+		IntBuffer rtx = BufferUtils.createIntBuffer(1);
+		IntBuffer rty = BufferUtils.createIntBuffer(1);
+		VRSystem_GetRecommendedRenderTargetSize(rtx, rty);
+		resolution = new Tuple<>(rtx.get(0), rty.get(0));
 		System.out.println("OpenVR Render Res " + resolution.getA() + " x " + resolution.getB());
 		ss = MCOpenVR.getSuperSampling();
 		System.out.println("OpenVR Supersampling: " + ss);
 
 		for (int i = 0; i < 2; i++) {
-			hiddenMeshes[i] = MCOpenVR.vrsystem.GetHiddenAreaMesh.apply(i,0);
-			hiddenMeshes[i].read();
-			int tc = hiddenMeshes[i].unTriangleCount;
+			HiddenAreaMesh mesh = HiddenAreaMesh.create();
+			VRSystem_GetHiddenAreaMesh(i,0, mesh);
+			hiddenMeshes.put(i, mesh);
+			int tc = mesh.unTriangleCount();
 			if(tc >0){
-				hiddenMesheVertecies[i] = new float[hiddenMeshes[i].unTriangleCount * 3 * 2];
-				Pointer arrptr = new Memory(hiddenMeshes[i].unTriangleCount * 3 * 2);
-				hiddenMeshes[i].pVertexData.getPointer().read(0, hiddenMesheVertecies[i], 0, hiddenMesheVertecies[i].length);
+				hiddenMesheVertecies[i] = new float[mesh.unTriangleCount() * 3 * 2];
+				//only way to do, because the float buffers used internally to store the coordinates are just wrappers around native memory (like all objects, that can be used
+				//for data-exchange between java and native code), which means that mesh.pVertexData().v().array() causes java.lang.UnsupportedOperationException
+				for(int vertexCount=0; vertexCount < hiddenMesheVertecies[i].length/2; vertexCount++) {
+					try {
+						hiddenMesheVertecies[i][vertexCount * 2 + 0] = mesh.pVertexData().get(vertexCount).v(0);
+						hiddenMesheVertecies[i][vertexCount * 2 + 1] = mesh.pVertexData().get(vertexCount).v(1);
+					}catch (IndexOutOfBoundsException e){
+						LOGGER.info("[Vivecraft] pVertexData for HiddenAreaMesh " + i + " has " + (vertexCount + 1) + " vertices, expected " + hiddenMesheVertecies[i].length);
+						break;
+					}
+				}
 
 				for (int ix = 0;ix < hiddenMesheVertecies[i].length;ix+=2) {
 					hiddenMesheVertecies[i][ix] = hiddenMesheVertecies[i][ix] * resolution.getA();
@@ -140,16 +157,16 @@ public class OpenVRStereoRenderer
 	{
 		if ( eyeType == 0 )
 		{
-			HmdMatrix44_t mat = MCOpenVR.vrsystem.GetProjectionMatrix.apply(JOpenVRLibrary.EVREye.EVREye_Eye_Left, nearClip, farClip);
-			//	MCOpenVR.texType0.depth.mProjection = mat;
-			//	MCOpenVR.texType0.depth.write();
+			HmdMatrix44 mat = HmdMatrix44.create();
+			VRSystem_GetProjectionMatrix(EVREye_Eye_Left, nearClip, farClip, mat);
+			//	MCOpenVR.texType0.depth().mProjection(mat);
 			Matrix4f left  = new Matrix4f();
 			left.setFromOpenVR(mat);
 			return left;
 		}else{
-			HmdMatrix44_t mat = MCOpenVR.vrsystem.GetProjectionMatrix.apply(JOpenVRLibrary.EVREye.EVREye_Eye_Right, nearClip, farClip);
-			//	MCOpenVR.texType1.depth.mProjection = mat;
-			//	MCOpenVR.texType1.depth.write();
+			HmdMatrix44 mat = HmdMatrix44.create();
+			VRSystem_GetProjectionMatrix(EVREye_Eye_Right, nearClip, farClip, mat);
+			//	MCOpenVR.texType0.depth().mProjection(mat)
 			Matrix4f right  = new Matrix4f();
 			right.setFromOpenVR(mat);
 			return right;
@@ -200,10 +217,10 @@ public class OpenVRStereoRenderer
 		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, lwidth, lheight, 0, GL11.GL_RGBA, GL11.GL_INT, (java.nio.ByteBuffer) null);
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, boundTextureId);
 
-		MCOpenVR.texType0.handle= Pointer.createConstant(LeftEyeTextureId);
-		MCOpenVR.texType0.eColorSpace = JOpenVRLibrary.EColorSpace.EColorSpace_ColorSpace_Gamma;
-		MCOpenVR.texType0.eType = JOpenVRLibrary.ETextureType.ETextureType_TextureType_OpenGL;
-		MCOpenVR.texType0.write();
+
+		MCOpenVR.texType0.handle(LeftEyeTextureId);
+		MCOpenVR.texType0.eColorSpace(EColorSpace_ColorSpace_Gamma);
+		MCOpenVR.texType0.eType(ETextureType_TextureType_OpenGL);
 		
 		// generate right eye texture
 		RightEyeTextureId = GL11.glGenTextures();
@@ -214,12 +231,10 @@ public class OpenVRStereoRenderer
 		GL11.glTexParameterf(GL11.GL_TEXTURE_2D, GL11.GL_TEXTURE_MAG_FILTER, GL11.GL_LINEAR);
 		GL11.glTexImage2D(GL11.GL_TEXTURE_2D, 0, GL11.GL_RGBA8, lwidth, lheight, 0, GL11.GL_RGBA, GL11.GL_INT, (java.nio.ByteBuffer) null);
 		GL11.glBindTexture(GL11.GL_TEXTURE_2D, boundTextureId);
-
-		MCOpenVR.texType1.handle=Pointer.createConstant(RightEyeTextureId);
-		MCOpenVR.texType1.eColorSpace = JOpenVRLibrary.EColorSpace.EColorSpace_ColorSpace_Gamma;
-		MCOpenVR.texType1.eType = JOpenVRLibrary.ETextureType.ETextureType_TextureType_OpenGL;
-		MCOpenVR.texType1.write();
-
+		
+		MCOpenVR.texType1.handle(RightEyeTextureId);
+		MCOpenVR.texType1.eColorSpace(EColorSpace_ColorSpace_Gamma);
+		MCOpenVR.texType1.eType(ETextureType_TextureType_OpenGL);
 	}
 
 	public boolean endFrame(RenderPass eye)
@@ -229,20 +244,20 @@ public class OpenVRStereoRenderer
 
 	public void endFrame() throws RenderConfigException {
 
-		if(MCOpenVR.vrCompositor.Submit == null) return;
-		
-		int lret = MCOpenVR.vrCompositor.Submit.apply(
-				JOpenVRLibrary.EVREye.EVREye_Eye_Left,
+		if(OpenVR.VRCompositor.Submit == 0L) return;
+
+		int lret = VRCompositor_Submit(
+				EVREye_Eye_Left,
 				MCOpenVR.texType0, null,
-				JOpenVRLibrary.EVRSubmitFlags.EVRSubmitFlags_Submit_Default);
+				EVRSubmitFlags_Submit_Default);
 
-		int rret = MCOpenVR.vrCompositor.Submit.apply(
-				JOpenVRLibrary.EVREye.EVREye_Eye_Right,
+		int rret = VRCompositor_Submit(
+				EVREye_Eye_Right,
 				MCOpenVR.texType1, null,
-				JOpenVRLibrary.EVRSubmitFlags.EVRSubmitFlags_Submit_Default);
+				EVRSubmitFlags_Submit_Default);
 
 
-		MCOpenVR.vrCompositor.PostPresentHandoff.apply();
+		VRCompositor_PostPresentHandoff();
 		
 		if(lret + rret > 0){
 			throw new RenderConfigException("Compositor Error","Texture submission error: Left/Right " + getCompostiorError(lret) + "/" + getCompostiorError(rret));		
@@ -251,27 +266,27 @@ public class OpenVRStereoRenderer
 	
 	public static String getCompostiorError(int code){
 		switch (code){
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_DoNotHaveFocus:
+		case EVRCompositorError_VRCompositorError_DoNotHaveFocus:
 			return "DoesNotHaveFocus";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_IncompatibleVersion:
+		case EVRCompositorError_VRCompositorError_IncompatibleVersion:
 			return "IncompatibleVersion";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_IndexOutOfRange:
+		case EVRCompositorError_VRCompositorError_IndexOutOfRange:
 			return "IndexOutOfRange";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_InvalidTexture:
+		case EVRCompositorError_VRCompositorError_InvalidTexture:
 			return "InvalidTexture";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_IsNotSceneApplication:
+		case EVRCompositorError_VRCompositorError_IsNotSceneApplication:
 			return "IsNotSceneApplication";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_RequestFailed:
+		case EVRCompositorError_VRCompositorError_RequestFailed:
 			return "RequestFailed";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_SharedTexturesNotSupported:
+		case EVRCompositorError_VRCompositorError_SharedTexturesNotSupported:
 			return "SharedTexturesNotSupported";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_TextureIsOnWrongDevice:
+		case EVRCompositorError_VRCompositorError_TextureIsOnWrongDevice:
 			return "TextureIsOnWrongDevice";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_TextureUsesUnsupportedFormat:
+		case EVRCompositorError_VRCompositorError_TextureUsesUnsupportedFormat:
 			return "TextureUsesUnsupportedFormat:";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_None:
+		case EVRCompositorError_VRCompositorError_None:
 			return "None:";
-		case EVRCompositorError.EVRCompositorError_VRCompositorError_AlreadySubmitted:
+		case EVRCompositorError_VRCompositorError_AlreadySubmitted:
 			return "AlreadySubmitted:";
 		}
 		return "Unknown";
@@ -612,8 +627,8 @@ public class OpenVRStereoRenderer
 				checkGLError("Right Eye framebuffer setup");
 			}
 
-			//MCOpenVR.texType0.depth.handle = Pointer.createConstant(framebufferEye0.depthBuffer);
-			//MCOpenVR.texType1.depth.handle = Pointer.createConstant(framebufferEye1.depthBuffer);
+			//MCOpenVR.texType0.depth().handle(framebufferEye0.depthBuffer);
+			//MCOpenVR.texType1.depth().handle(framebufferEye1.depthBuffer);
 			this.renderScale = (float)Math.sqrt((mc.vrSettings.renderScaleFactor));
 			displayFBWidth = (int)Math.ceil(eyew * renderScale);
 			displayFBHeight = (int)Math.ceil(eyeh * renderScale);

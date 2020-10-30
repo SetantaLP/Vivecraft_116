@@ -4,9 +4,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
-import org.vivecraft.provider.MCOpenVR;
+import org.lwjgl.openvr.*;
 
-import jopenvr.JOpenVRLibrary;
+import static org.lwjgl.openvr.VR.*;
+import static org.lwjgl.openvr.VRInput.*;
+
+import org.vivecraft.provider.MCOpenVR;
 
 public class HapticScheduler {
 	private ScheduledExecutorService executor;
@@ -16,7 +19,7 @@ public class HapticScheduler {
 	}
 
 	private void triggerHapticPulse(ControllerType controller, float durationSeconds, float frequency, float amplitude) {
-		int error = MCOpenVR.vrInput.TriggerHapticVibrationAction.apply(MCOpenVR.getHapticHandle(controller), 0, durationSeconds, frequency, amplitude, JOpenVRLibrary.k_ulInvalidInputValueHandle);
+		int error = VRInput_TriggerHapticVibrationAction(MCOpenVR.getHapticHandle(controller), 0, durationSeconds, frequency, amplitude, k_ulInvalidInputValueHandle);
 		if (error != 0)
 			System.out.println("Error triggering haptic: " + MCOpenVR.getInputError(error));
 	}

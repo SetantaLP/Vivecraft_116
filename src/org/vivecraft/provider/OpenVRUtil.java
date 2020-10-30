@@ -6,13 +6,11 @@ package org.vivecraft.provider;
 
 import java.util.concurrent.TimeUnit;
 
+import org.lwjgl.openvr.HmdMatrix34;
+import org.lwjgl.openvr.HmdMatrix44;
 import org.vivecraft.utils.math.Matrix4f;
 import org.vivecraft.utils.math.Quaternion;
 import org.vivecraft.utils.math.Vector3;
-
-import jopenvr.HmdMatrix34_t;
-import jopenvr.HmdMatrix44_t;
-
 
 /**
  *
@@ -73,23 +71,23 @@ public class OpenVRUtil {
         mat.M[0][3] = mat.M[1][3] = mat.M[2][1] = mat.M[3][0] = 0.0F;
         return mat;
     }
-        
-    public static Matrix4f convertSteamVRMatrix3ToMatrix4f(HmdMatrix34_t hmdMatrix, Matrix4f mat){
+
+    public static Matrix4f convertSteamVRMatrix3ToMatrix4f(HmdMatrix34 hmdMatrix, Matrix4f mat){
         Matrix4fSet(mat,
-                hmdMatrix.m[0], hmdMatrix.m[1], hmdMatrix.m[2], hmdMatrix.m[3],
-                hmdMatrix.m[4], hmdMatrix.m[5], hmdMatrix.m[6], hmdMatrix.m[7],
-                hmdMatrix.m[8], hmdMatrix.m[9], hmdMatrix.m[10], hmdMatrix.m[11],
+                hmdMatrix.m(0), hmdMatrix.m(1), hmdMatrix.m(2), hmdMatrix.m(3),
+                hmdMatrix.m(4), hmdMatrix.m(5), hmdMatrix.m(6), hmdMatrix.m(7),
+                hmdMatrix.m(8), hmdMatrix.m(9), hmdMatrix.m(10), hmdMatrix.m(11),
                 0f, 0f, 0f, 1f
         );
         return mat;
     }
-    
-    public static Matrix4f convertSteamVRMatrix4ToMatrix4f(HmdMatrix44_t hmdMatrix, Matrix4f mat)
+
+    public static Matrix4f convertSteamVRMatrix4ToMatrix4f(HmdMatrix44 hmdMatrix, Matrix4f mat)
     {
-        Matrix4fSet(mat, hmdMatrix.m[0], hmdMatrix.m[1], hmdMatrix.m[2], hmdMatrix.m[3],
-                hmdMatrix.m[4], hmdMatrix.m[5], hmdMatrix.m[6], hmdMatrix.m[7],
-                hmdMatrix.m[8], hmdMatrix.m[9], hmdMatrix.m[10], hmdMatrix.m[11],
-                hmdMatrix.m[12], hmdMatrix.m[13], hmdMatrix.m[14], hmdMatrix.m[15]);
+        Matrix4fSet(mat, hmdMatrix.m(0), hmdMatrix.m(1), hmdMatrix.m(2), hmdMatrix.m(3),
+                hmdMatrix.m(4), hmdMatrix.m(5), hmdMatrix.m(6), hmdMatrix.m(7),
+                hmdMatrix.m(8), hmdMatrix.m(9), hmdMatrix.m(10), hmdMatrix.m(11),
+                hmdMatrix.m(12), hmdMatrix.m(13), hmdMatrix.m(14), hmdMatrix.m(15));
         return mat;
     }
     

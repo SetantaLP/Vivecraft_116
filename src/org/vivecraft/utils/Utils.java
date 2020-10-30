@@ -52,6 +52,7 @@ import optifine.OptiFineTransformer;
 
 import org.apache.commons.io.IOUtils;
 import org.apache.logging.log4j.LogManager;
+import org.lwjgl.openvr.HmdMatrix34;
 import org.vivecraft.render.VRShaders;
 import org.vivecraft.tweaker.MinecriftClassTransformer;
 import org.vivecraft.utils.lwjgl.Matrix3f;
@@ -68,7 +69,6 @@ import com.google.common.base.Charsets;
 import com.google.common.io.Files;
 import com.mojang.blaze3d.platform.GlStateManager;
 
-import jopenvr.HmdMatrix34_t;
 import net.minecraft.client.Minecraft;
 import net.minecraft.particles.IParticleData;
 import net.minecraft.util.math.vector.Vector3d;
@@ -151,21 +151,21 @@ public class Utils
 		mat.M[3][3] = matrix.m33;
 		return mat;
 	}
-	
-	public static HmdMatrix34_t convertToMatrix34(Matrix4f matrix) {
-		HmdMatrix34_t mat = new HmdMatrix34_t();
-		mat.m[0 + 0 * 4] = matrix.m00;
-		mat.m[1 + 0 * 4] = matrix.m10;
-		mat.m[2 + 0 * 4] = matrix.m20;
-		mat.m[3 + 0 * 4] = matrix.m30;
-		mat.m[0 + 1 * 4] = matrix.m01;
-		mat.m[1 + 1 * 4] = matrix.m11;
-		mat.m[2 + 1 * 4] = matrix.m21;
-		mat.m[3 + 1 * 4] = matrix.m31;
-		mat.m[0 + 2 * 4] = matrix.m02;
-		mat.m[1 + 2 * 4] = matrix.m12;
-		mat.m[2 + 2 * 4] = matrix.m22;
-		mat.m[3 + 2 * 4] = matrix.m32;
+
+	public static HmdMatrix34 convertToMatrix34(Matrix4f matrix) {
+		HmdMatrix34 mat = HmdMatrix34.create();
+		mat.m(0 + 0 * 4, matrix.m00);
+		mat.m(1 + 0 * 4, matrix.m10);
+		mat.m(2 + 0 * 4, matrix.m20);
+		mat.m(3 + 0 * 4, matrix.m30);
+		mat.m(0 + 1 * 4, matrix.m01);
+		mat.m(1 + 1 * 4, matrix.m11);
+		mat.m(2 + 1 * 4, matrix.m21);
+		mat.m(3 + 1 * 4, matrix.m31);
+		mat.m(0 + 2 * 4, matrix.m02);
+		mat.m(1 + 2 * 4, matrix.m12);
+		mat.m(2 + 2 * 4, matrix.m22);
+		mat.m(3 + 2 * 4, matrix.m32);
 		return mat;
 	}
 

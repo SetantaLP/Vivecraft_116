@@ -1460,7 +1460,18 @@
 			"natives": {
 				"linux": "natives-linux",
 				"windows": "natives-windows"
-			}
+			},
+			"rules": [
+				{
+					"action": "allow"
+				},
+				{
+					"action": "disallow",
+					"os": {
+						"name": "osx"
+					}
+				}
+			]
 		},
 		{
 			"downloads": {

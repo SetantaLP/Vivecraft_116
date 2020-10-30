@@ -249,6 +249,12 @@ def download_deps( mcp_dir, download_mc, forgedep=False ):
                             if "name" in entry:
                                 if rule["os"]["name"] == native:
                                     skip = False
+					
+                    if "action" in rule and rule["action"] == "disallow" and "os" in rule:
+                        for entry in rule["os"]:
+                            if "name" in entry:
+                                if rule["os"]["name"] == native:
+                                    skip = True
 
             if skip:
                 print 'File: %s\nSkipping due to rules' % libname

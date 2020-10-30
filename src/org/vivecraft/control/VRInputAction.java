@@ -1,5 +1,6 @@
 package org.vivecraft.control;
 
+import java.nio.LongBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -7,19 +8,18 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
+import org.lwjgl.openvr.*;
+
+import static org.lwjgl.openvr.VR.*;
+import static org.lwjgl.openvr.VRInput.*;
+
+import org.lwjgl.BufferUtils;
 import org.lwjgl.glfw.GLFW;
 import org.vivecraft.provider.MCOpenVR;
 import org.vivecraft.reflection.MCReflection;
 import org.vivecraft.utils.math.Vector2;
 import org.vivecraft.utils.math.Vector3;
 
-import com.sun.jna.Memory;
-import com.sun.jna.Pointer;
-import com.sun.jna.ptr.LongByReference;
-
-import jopenvr.InputAnalogActionData_t;
-import jopenvr.InputDigitalActionData_t;
-import jopenvr.JOpenVRLibrary;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.client.util.InputMappings;
 import net.optifine.reflect.Reflector;
@@ -40,8 +40,8 @@ public class VRInputAction {
 	private boolean[] pressed = new boolean[ControllerType.values().length];
 	protected int[] unpressInTicks = new int[ControllerType.values().length];
 
-	private InputDigitalActionData_t.ByReference[] digitalData = new InputDigitalActionData_t.ByReference[ControllerType.values().length];
-	private InputAnalogActionData_t.ByReference[] analogData = new InputAnalogActionData_t.ByReference[ControllerType.values().length];
+	private InputDigitalActionData.Buffer digitalData = InputDigitalActionData.create(ControllerType.values().length);
+	private InputAnalogActionData.Buffer analogData = InputAnalogActionData.create(ControllerType.values().length);
 
 	public VRInputAction(KeyBinding keyBinding, String requirement, String type, VRInputActionSet actionSetOverride) {
 		this.keyBinding = keyBinding;
@@ -52,20 +52,13 @@ public class VRInputAction {
 
 		for (int i = 0; i < ControllerType.values().length; i++) {
 			enabled[i] = true;
-			digitalData[i] = new InputDigitalActionData_t.ByReference();
-			digitalData[i].setAutoRead(false);
-			digitalData[i].setAutoWrite(false);
-			digitalData[i].setAutoSynch(false);
-			analogData[i] = new InputAnalogActionData_t.ByReference();
-			analogData[i].setAutoRead(false);
-			analogData[i].setAutoWrite(false);
-			analogData[i].setAutoSynch(false);
+			//TODO: check if it is necessary to initialise the entries of digitalData[i] and analogData[i]
 		}
 	}
 
 	public boolean isButtonPressed() {
 		if (type.equals("boolean")) {
-			return digitalData().bState != 0;
+			return digitalData().bState();
 		} else {
 			Vector3 axis = getAxis3D(false);
 			return Math.abs(axis.getX()) > 0.5f || Math.abs(axis.getY()) > 0.5f || Math.abs(axis.getZ()) > 0.5f;
@@ -74,7 +67,7 @@ public class VRInputAction {
 
 	public boolean isButtonChanged() {
 		if (type.equals("boolean")) {
-			return digitalData().bChanged != 0;
+			return digitalData().bChanged();
 		} else {
 			Vector3 axis = getAxis3D(false);
 			Vector3 delta = getAxis3D(true);
@@ -91,7 +84,7 @@ public class VRInputAction {
 			case "vector1":
 			case "vector2":
 			case "vector3":
-				return delta ? analogData().deltaX : analogData().x;
+				return delta ? analogData().deltaX() : analogData().x();
 			default:
 				return 0.0f;
 		}
@@ -102,10 +95,10 @@ public class VRInputAction {
 			case "boolean":
 				return new Vector2(digitalToAnalog(delta), 0.0f);
 			case "vector1":
-				return delta ? new Vector2(analogData().deltaX, 0.0f) : new Vector2(analogData().x, 0.0f);
+				return delta ? new Vector2(analogData().deltaX(), 0.0f) : new Vector2(analogData().x(), 0.0f);
 			case "vector2":
 			case "vector3":
-				return delta ? new Vector2(analogData().deltaX, analogData().deltaY) : new Vector2(analogData().x, analogData().y);
+				return delta ? new Vector2(analogData().deltaX(), analogData().deltaY()) : new Vector2(analogData().x(), analogData().y());
 			default:
 				return new Vector2();
 		}
@@ -116,11 +109,11 @@ public class VRInputAction {
 			case "boolean":
 				return new Vector3(digitalToAnalog(delta), 0.0f, 0.0f);
 			case "vector1":
-				return delta ? new Vector3(analogData().deltaX, 0.0f, 0.0f) : new Vector3(analogData().x, 0.0f, 0.0f);
+				return delta ? new Vector3(analogData().deltaX(), 0.0f, 0.0f) : new Vector3(analogData().x(), 0.0f, 0.0f);
 			case "vector2":
-				return delta ? new Vector3(analogData().deltaX, analogData().deltaY, 0.0f) : new Vector3(analogData().x, analogData().y, 0.0f);
+				return delta ? new Vector3(analogData().deltaX(), analogData().deltaY(), 0.0f) : new Vector3(analogData().x(), analogData().y(), 0.0f);
 			case "vector3":
-				return delta ? new Vector3(analogData().deltaX, analogData().deltaY, analogData().deltaZ) : new Vector3(analogData().x, analogData().y, analogData().z);
+				return delta ? new Vector3(analogData().deltaX(), analogData().deltaY(), analogData().deltaZ()) : new Vector3(analogData().x(), analogData().y(), analogData().z());
 			default:
 				return new Vector3();
 		}
@@ -128,25 +121,25 @@ public class VRInputAction {
 
 	private float digitalToAnalog(boolean delta) {
 		if (delta) {
-			if (digitalData().bChanged != 0)
-				return digitalData().bState != 0 ? 1.0f : -1.0f;
+			if (digitalData().bChanged())
+				return digitalData().bState() ? 1.0f : -1.0f;
 			else
 				return 0.0f;
 		} else {
-			return digitalData().bState != 0 ? 1.0f : 0.0f;
+			return digitalData().bState() ? 1.0f : 0.0f;
 		}
 	}
 
 	public long getLastOrigin() {
 		switch (type) {
 			case "boolean":
-				return digitalData().activeOrigin;
+				return digitalData().activeOrigin();
 			case "vector1":
 			case "vector2":
 			case "vector3":
-				return analogData().activeOrigin;
+				return analogData().activeOrigin();
 			default:
-				return JOpenVRLibrary.k_ulInvalidInputValueHandle;
+				return k_ulInvalidInputValueHandle;
 		}
 	}
 
@@ -182,10 +175,9 @@ public class VRInputAction {
 		if (hand != null)
 			index = hand.ordinal();
 
-		int error = MCOpenVR.vrInput.GetDigitalActionData.apply(handle, digitalData[index], digitalData[index].size(), hand != null ? MCOpenVR.getControllerHandle(hand) : JOpenVRLibrary.k_ulInvalidInputValueHandle);
+		int error = VRInput_GetDigitalActionData(handle, digitalData.get(index), hand != null ? MCOpenVR.getControllerHandle(hand) : k_ulInvalidInputValueHandle);
 		if (error != 0)
 			throw new RuntimeException("Error reading digital data for '" + this.name + "': " + MCOpenVR.getInputError(error));
-		digitalData[index].read();
 	}
 
 	private void readAnalogData(ControllerType hand) {
@@ -193,39 +185,39 @@ public class VRInputAction {
 		if (hand != null)
 			index = hand.ordinal();
 
-		int error = MCOpenVR.vrInput.GetAnalogActionData.apply(handle, analogData[index], analogData[index].size(), hand != null ? MCOpenVR.getControllerHandle(hand) : JOpenVRLibrary.k_ulInvalidInputValueHandle);
+		int error = VRInput_GetAnalogActionData(handle, analogData.get(index), hand != null ? MCOpenVR.getControllerHandle(hand) : k_ulInvalidInputValueHandle);
 		if (error != 0)
 			throw new RuntimeException("Error reading analog data for '" + this.name + "': " + MCOpenVR.getInputError(error));
-		analogData[index].read();
 	}
 
-	private InputDigitalActionData_t digitalData() {
+	private InputDigitalActionData digitalData() {
 		if (isHanded()) {
-			return digitalData[currentHand.ordinal()];
+			return digitalData.get(currentHand.ordinal());
 		} else {
-			return digitalData[0];
+			return digitalData.get(0);
 		}
 	}
 
-	private InputAnalogActionData_t analogData() {
+	private InputAnalogActionData analogData() {
 		if (isHanded()) {
-			return analogData[currentHand.ordinal()];
+			return analogData.get(currentHand.ordinal());
 		} else {
-			return analogData[0];
+			return analogData.get(0);
 		}
 	}
 
 	public List<Long> getOrigins() {
-		Pointer p = new Memory(JOpenVRLibrary.k_unMaxActionOriginCount * 8);
-		LongByReference longRef = new LongByReference();
-		longRef.setPointer(p);
-		int error = MCOpenVR.vrInput.GetActionOrigins.apply(MCOpenVR.getActionSetHandle(actionSet), handle, longRef, JOpenVRLibrary.k_unMaxActionOriginCount);
+		LongBuffer longBuf = BufferUtils.createLongBuffer(k_unMaxActionOriginCount);
+		int error = VRInput_GetActionOrigins(MCOpenVR.getActionSetHandle(actionSet), handle, longBuf);
 		if (error != 0)
 			throw new RuntimeException("Error getting action origins for '" + this.name + "': " + MCOpenVR.getInputError(error));
 
 		List<Long> list = new ArrayList<>();
-		for (long handle : p.getLongArray(0, JOpenVRLibrary.k_unMaxActionOriginCount)) {
-			if (handle != JOpenVRLibrary.k_ulInvalidInputValueHandle)
+		//longBuf.array() causes java.lang.UnsupportedOperationException at java.nio.LongBuffer.array(LongBuffer.java:994), because this method is only supported on HeapLongBuffers
+		//(which are technically wrapped java arrays and not supported for for passing data to Native Code)
+		for(int i = 0; i < k_unMaxActionOriginCount; i++){
+			long handle = longBuf.get(i);
+			if (handle != k_ulInvalidInputValueHandle)
 				list.add(handle);
 		}
 
@@ -300,11 +292,11 @@ public class VRInputAction {
 	public boolean isActive() {
 		switch (type) {
 			case "boolean":
-				return digitalData().bActive != 0;
+				return digitalData().bActive();
 			case "vector1":
 			case "vector2":
 			case "vector3":
-				return analogData().bActive != 0;
+				return analogData().bActive();
 			default:
 				return false;
 		}
