@@ -352,7 +352,7 @@ public class MCOpenVR
 		//unpackPlatformNatives();
 		
 		if(!VR_IsHmdPresent()){
-			initStatus =  "VR Headset not detected.";
+			initStatus =  "vivecraft.messages.nosteamvr";
 			return false;
 		}
 
