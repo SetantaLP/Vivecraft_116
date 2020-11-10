@@ -267,7 +267,11 @@ def download_deps( mcp_dir, download_mc, forgedep=False ):
                 repo = "https://libraries.minecraft.net/"
 
             if "natives" in lib:
-                url = group.replace(".","/")+ "/"+artifact+"/"+version +"/"+artifact+"-"+version+"-"+lib["natives"][native]+".jar"
+                if native in lib["natives"]:
+                    url = group.replace(".","/")+ "/"+artifact+"/"+version +"/"+artifact+"-"+version+"-"+lib["natives"][native]+".jar"
+                else:
+                    print 'File: %s\nSkipping due to missing native lib.' % libname
+                    continue
             else:
                 url = group.replace(".","/")+ "/"+artifact+"/"+version +"/"+artifact+"-"+version+".jar"
 
