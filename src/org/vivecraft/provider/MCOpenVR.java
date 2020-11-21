@@ -103,6 +103,8 @@ import net.minecraft.world.World;
 
 public class MCOpenVR 
 {
+	//let the compositor render until the game reaches the main menu
+	static boolean StageRenderingEnabled = true;
 	static String initStatus;
 	private static boolean initialized;
 	private static boolean inputInitialized;
@@ -377,6 +379,10 @@ public class MCOpenVR
 			mc.vrSettings.seated = true;
 		}
 		
+		//disabled for now, since during testing meshes from Half Life Alyx have been used
+		//setupStageOverride("loadingscreen/startup.obj");
+		fadeToStage(.1f);
+
 		System.out.println( "OpenVR initialized & VR connected." );
 
 		controllers[RIGHT_CONTROLLER] = new TrackedController(ControllerType.RIGHT);
@@ -438,6 +444,81 @@ public class MCOpenVR
 
 	public static int getError(){
 		return hmdErrorStoreBuf.get(0);
+	}
+
+	private static HmdMatrix34 locationToHmdMatrix34(float x, float y, float z){
+		HmdMatrix34 matrix = HmdMatrix34.create();//last column (i * 4 + 3) is location, rest is the rotation-quaternion and scale merged into a 3x3 matrix
+		for(int i = 0; i < 3; i++){
+			matrix.m(i * 4 + 0, 0.0f);
+			matrix.m(i * 4 + 1, 0.0f);
+			matrix.m(i * 4 + 2, 0.0f);
+			matrix.m(i * 4 + 3, (i == 0 ? x : (i == 1 ? y : z)));
+		}
+		return matrix;
+	}
+
+	/**
+	 * @param path can be a path relative to the game directory or an absolute path
+	 */
+	public static boolean setupStageOverride(String path){
+		return setupStageOverride(path, 0.0f, 0.0f, 0.0f);
+	}
+
+	/**
+	 * @param path can be a path relative to the game directory or an absolute path
+	 */
+	public static boolean setupStageOverride(String path, float x, float y, float z){
+		HmdMatrix34 cMat = locationToHmdMatrix34(x, y, z);
+		CompositorStageRenderSettings cSettings = CompositorStageRenderSettings.create();
+		cSettings.m_PrimaryColor(cSettings.m_PrimaryColor().set(1.0f, 1.0f, 1.0f, 1.0f));
+		cSettings.m_SecondaryColor(cSettings.m_SecondaryColor().set(1.0f, 1.0f, 1.0f, 1.0f));
+		cSettings.m_flVignetteInnerRadius(0.0f);
+		cSettings.m_flVignetteOuterRadius(0.0f);
+		cSettings.m_flFresnelStrength(0.0f);
+		cSettings.m_bBackfaceCulling(false);
+		cSettings.m_bGreyscale(false);
+		cSettings.m_bWireframe(false);
+		System.out.println("cSettings.m_PrimaryColor(): " + cSettings.m_PrimaryColor().r() + ", " + cSettings.m_PrimaryColor().g() + ", " + cSettings.m_PrimaryColor().b() + ", " + cSettings.m_PrimaryColor().a());
+		System.out.println("cSettings.m_SecondaryColor(): " + cSettings.m_SecondaryColor().r() + ", " + cSettings.m_SecondaryColor().g() + ", " + cSettings.m_SecondaryColor().b() + ", " + cSettings.m_SecondaryColor().a());
+		System.out.println("cSettings.m_flVignetteInnerRadius(): " + cSettings.m_flVignetteInnerRadius());
+		System.out.println("cSettings.m_flVignetteOuterRadius(): " + cSettings.m_flVignetteOuterRadius());
+		System.out.println("cSettings.m_flFresnelStrength(): " + cSettings.m_flFresnelStrength());
+		System.out.println("cSettings.m_bBackfaceCulling(): " + cSettings.m_bBackfaceCulling());
+		System.out.println("cSettings.m_bGreyscale(): " + cSettings.m_bGreyscale());
+		System.out.println("cSettings.m_bWireframe(): " + cSettings.m_bWireframe());
+		int cError = VRCompositor_SetStageOverride_Async(new File(path).getAbsolutePath(), cMat, cSettings);
+		if(cError != EVRCompositorError_VRCompositorError_None){
+			System.out.println("Setting Stage override failed: " + cError);
+ 			return false;
+		}else{
+			System.out.println("Setting Stage override successful");
+			return true;
+		}
+	}
+
+	public static void fadeToStage(float seconds){
+		if(StageRenderingEnabled){
+			return;
+		}
+		VRCompositor_FadeGrid(seconds, true);
+		//or the latter which does the same without fading
+		//VRCompositor_ClearLastSubmittedFrame();
+
+		//VRCompositor_SuspendRendering(true);
+		StageRenderingEnabled = true;
+	}
+
+	public static boolean isStageRendering(){
+		return StageRenderingEnabled;
+	}
+
+	public static void fadeFromStage(float seconds){
+		if(!StageRenderingEnabled){
+			return;
+		}
+		VRCompositor_FadeGrid(seconds, false);
+		//VRCompositor_SuspendRendering(false);
+		StageRenderingEnabled = false;
 	}
 
 	public static Set<KeyBinding> getKeyBindings() {
@@ -1185,33 +1266,37 @@ public class MCOpenVR
 
 		mc.getProfiler().startSection("events");
 		pollVREvents();
-
-		if(!mc.vrSettings.seated){
-			mc.getProfiler().endStartSection("controllers");
-
-			// GUI controls
-
-			mc.getProfiler().startSection("gui");
-
-			if(mc.currentScreen == null && mc.vrSettings.vrTouchHotbar && mc.vrSettings.vrHudLockMode != mc.vrSettings.HUD_LOCK_HEAD && hudPopup){
-				processHotbar();
-			}
-
-			mc.getProfiler().endSection();
-		}
-
+	
 		mc.getProfiler().endStartSection("processEvents");
 		processVREvents();
-
-		mc.getProfiler().endStartSection("updatePose/Vsync");
-		updatePose();
-
-		mc.getProfiler().endStartSection("processInputs");
-		processInputs();
-
-		mc.getProfiler().endStartSection("hmdSampling");
-		hmdSampling();
 		
+		//no need for processing poses/input, when we are in the compositor
+		if(!isStageRendering())
+		{
+			if(!mc.vrSettings.seated){
+				mc.getProfiler().endStartSection("controllers");
+	
+				// GUI controls
+	
+				mc.getProfiler().startSection("gui");
+	
+				if(mc.currentScreen == null && mc.vrSettings.vrTouchHotbar && mc.vrSettings.vrHudLockMode != mc.vrSettings.HUD_LOCK_HEAD && hudPopup){
+					processHotbar();
+				}
+	
+				mc.getProfiler().endSection();
+			}
+	
+			mc.getProfiler().endStartSection("updatePose/Vsync");
+			updatePose();
+	
+			mc.getProfiler().endStartSection("processInputs");
+			processInputs();
+	
+			mc.getProfiler().endStartSection("hmdSampling");
+			hmdSampling();		
+		}
+
 		mc.getProfiler().endSection();
 	}
 	
@@ -1847,6 +1932,12 @@ public class MCOpenVR
 						KeyboardSimulator.type(str); //holy shit it works.
 					}
 					break;*/
+				case EVREventType_VREvent_Compositor_StageOverrideReady:
+					System.out.println("Stage Override Ready");
+					//VRCompositor_FadeGrid(0.0f, false);
+					//VRCompositor_FadeGrid(0.0f, true);
+					//fadeToStage(0.0f);
+					break;
 				case EVREventType_VREvent_Quit:
 					mc.shutdown();
 					break;
@@ -2103,9 +2194,9 @@ public class MCOpenVR
 
 	private static void readPoseData(long actionHandle) {
 		//VRInput_GetPoseActionDataForNextFrame was introduced in OpenVR 1.4.18, which is the successor of 1.3.22 used in lwjgl 3.2.2 
-		//int error = VRInput_GetPoseActionDataForNextFrame(actionHandle, ETrackingUniverseOrigin_TrackingUniverseStanding, poseData, k_ulInvalidInputValueHandle);
+		int error = VRInput_GetPoseActionDataForNextFrame(actionHandle, ETrackingUniverseOrigin_TrackingUniverseStanding, poseData, k_ulInvalidInputValueHandle);
 		//that seems to work, TODO: update when LWJGL is updated to 3.2.3
-		int error = VRInput_GetPoseActionData(actionHandle, ETrackingUniverseOrigin_TrackingUniverseStanding, 0.0f, poseData, k_ulInvalidInputValueHandle);
+		//int error = VRInput_GetPoseActionData(actionHandle, ETrackingUniverseOrigin_TrackingUniverseStanding, 0.0f, poseData, k_ulInvalidInputValueHandle);
 		if (error != 0)
 			throw new RuntimeException("Error reading pose data: " + getInputError(error));
 	}

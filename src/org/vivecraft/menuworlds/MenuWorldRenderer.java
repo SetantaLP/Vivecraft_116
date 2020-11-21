@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Random;
 import java.util.Set;
 
+import org.vivecraft.provider.MCOpenVR;
 import org.vivecraft.reflection.MCReflection;
 import org.vivecraft.render.GLUtils;
 import org.vivecraft.settings.VRSettings;
@@ -247,6 +248,9 @@ public class MenuWorldRenderer {
 
 				copyVisibleTextures();
 				ready = true;
+				if (MCOpenVR.isStageRendering()) {
+					MCOpenVR.fadeFromStage(1.0f);
+				}
 			} finally {
 				mc.gameSettings.ambientOcclusionStatus = ao;
 				FluidBlockRenderer.skipStupidGoddamnChunkBoundaryClipping = false;

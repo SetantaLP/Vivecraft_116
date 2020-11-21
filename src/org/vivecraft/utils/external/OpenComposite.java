@@ -35,18 +35,8 @@ public final class OpenComposite {
     }
     
     public static void create(int token) {
-//    	try {
-//	     	OpenVR.checkInitToken();
-//	     	OpenComposite.token = token;
-//	     	
-//	        VROCSystem = getGenericInterface(IVROCSystem_Version, IVROCSystem::new);
-//
-//    	}catch (IllegalStateException e) {
-//    		//To make sure that the OpenVR class (that loads the openvr_api.dll (windows)/libopenvr_api.so (linux)) has been executed
-//			LOGGER.error("Failed to initialize OpenComposite. OpenVR has to be initialized first.");
-//		}
     	try {
-    		//To make sure that the OpenVR class (that loads the openvr_api.dll (windows)/libopenvr_api.so (linux)) has been executed
+    		//To make sure that the OpenVR class (that loads the openvr_api.dll (windows)/libopenvr_api.so (linux)) has been loaded
     		//calling OpenVR.initialize() would be better, but thats package private.
 	     	OpenVR.checkInitToken();
     	}catch (IllegalStateException e) {

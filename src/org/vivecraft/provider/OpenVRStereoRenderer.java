@@ -157,15 +157,13 @@ public class OpenVRStereoRenderer
 	{
 		if ( eyeType == 0 )
 		{
-			HmdMatrix44 mat = HmdMatrix44.create();
-			VRSystem_GetProjectionMatrix(EVREye_Eye_Left, nearClip, farClip, mat);
+			HmdMatrix44 mat = VRSystem_GetProjectionMatrix(EVREye_Eye_Left, nearClip, farClip, HmdMatrix44.create());
 			//	MCOpenVR.texType0.depth().mProjection(mat);
 			Matrix4f left  = new Matrix4f();
 			left.setFromOpenVR(mat);
 			return left;
 		}else{
-			HmdMatrix44 mat = HmdMatrix44.create();
-			VRSystem_GetProjectionMatrix(EVREye_Eye_Right, nearClip, farClip, mat);
+			HmdMatrix44 mat = VRSystem_GetProjectionMatrix(EVREye_Eye_Right, nearClip, farClip, HmdMatrix44.create());
 			//	MCOpenVR.texType0.depth().mProjection(mat)
 			Matrix4f right  = new Matrix4f();
 			right.setFromOpenVR(mat);
